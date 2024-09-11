@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -12,6 +11,8 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 )
+
+//NOTE: separate auth logic into dedicated internal/auth file. that would be like createJWT and such so there are not 1000000 fucking if err != nil
 
 func (cfg *apiConfig) createUsersHandler(w http.ResponseWriter, req *http.Request) {
 	type parameters struct {
@@ -53,7 +54,6 @@ func (cfg *apiConfig) updateUsersLoginHandler(w http.ResponseWriter, req *http.R
 
 	tokenString := strings.TrimPrefix(req.Header.Get("Authorization"), "Bearer ")
 
-	log.Print(tokenString)
 	type customClaims struct {
 		jwt.RegisteredClaims
 	}
@@ -133,7 +133,7 @@ func (cfg *apiConfig) loginUsersHadler(w http.ResponseWriter, req *http.Request)
 		return
 	}
 
-    expiration := time.Duration(0 * time.Second)
+	expiration := time.Duration(0 * time.Second)
 	if params.ExpiresInSeconds == 0 || params.ExpiresInSeconds > 24 {
 		expiration = time.Duration(24 * time.Hour)
 	} else {
