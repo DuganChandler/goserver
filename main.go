@@ -3,34 +3,41 @@ package main
 import (
 	"log"
 	"net/http"
+	"os"
 
 	"github.com/DuganChandler/goserver/internal/database"
+	"github.com/joho/godotenv"
 )
 
 type apiConfig struct {
 	fileserverHits int
 	DB             *database.DB
+	JWTSecret      string
 }
 
 func main() {
 	const filePathRoot = "."
 	const port = "8080"
+	godotenv.Load()
 
 	db, err := database.NewDB("database.json")
 	if err != nil {
 		log.Fatal(err)
 	}
 
+	jwtSecret := os.Getenv("JWT_SECRET")
+
 	apiCfg := &apiConfig{
 		fileserverHits: 0,
 		DB:             db,
+		JWTSecret:      jwtSecret,
 	}
 
 	mux := http.NewServeMux()
 	handler := http.StripPrefix("/app", http.FileServer(http.Dir(filePathRoot)))
 	mux.Handle("/app/", apiCfg.middlwareMetricsInc(handler))
 
-    // API
+	// API
 	mux.HandleFunc("GET /api/healthz", getHealth)
 	mux.HandleFunc("GET /api/reset", apiCfg.resetHits)
 
@@ -39,10 +46,11 @@ func main() {
 	mux.HandleFunc("POST /api/chirps", apiCfg.createChirpsHandler)
 
 	mux.HandleFunc("POST /api/users", apiCfg.createUsersHandler)
+    mux.HandleFunc("PUT /api/users", apiCfg.updateUsersLoginHandler)
 
-    mux.HandleFunc("POST /api/login", apiCfg.loginUsersHadler)
+	mux.HandleFunc("POST /api/login", apiCfg.loginUsersHadler)
 
-    // ADMIN
+	// ADMIN
 	mux.HandleFunc("GET /admin/metrics", apiCfg.getHits)
 
 	srv := &http.Server{
