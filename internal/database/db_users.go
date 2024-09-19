@@ -1,6 +1,8 @@
 package database
 
-import "fmt"
+import (
+	"fmt"
+)
 
 func (db *DB) CreateUsers(email, password string) (User, error) {
 	dbStructure, err := db.loadDB()
@@ -8,7 +10,7 @@ func (db *DB) CreateUsers(email, password string) (User, error) {
 		return User{}, err
 	}
 
-    _, ok := searchUserByEmail(dbStructure, email)
+	_, ok := searchUserByEmail(dbStructure, email)
 	if ok {
 		return User{}, fmt.Errorf("user with email already exists")
 
@@ -16,9 +18,10 @@ func (db *DB) CreateUsers(email, password string) (User, error) {
 
 	userID := len(dbStructure.Users) + 1
 	user := User{
-		Id:       userID,
-		Email:    email,
-		Password: password,
+		Id:          userID,
+		Email:       email,
+		Password:    password,
+		IsChirpyRed: false,
 	}
 
 	dbStructure.Users[userID] = user
@@ -46,58 +49,31 @@ func (db *DB) GetUserByID(id int) (User, error) {
 }
 
 func (db *DB) UpdateUserLogin(email, password string, id int) (User, error) {
-    dbStructure, err := db.loadDB()
-    if err != nil {
-        return User{}, err
-    }
+	dbStructure, err := db.loadDB()
+	if err != nil {
+		return User{}, err
+	}
 
-    user, ok := dbStructure.Users[id]
-    if !ok {
-        return User{}, fmt.Errorf("user does not exist")
-    }
-    
-    updatedUser := User{
-        Id: user.Id,
-        Email: email,
-        Password: password,
-        Token: user.Token,
-    }
+	user, ok := dbStructure.Users[id]
+	if !ok {
+		return User{}, fmt.Errorf("user does not exist")
+	}
 
-    dbStructure.Users[id] = updatedUser
+	updatedUser := User{
+		Id:          user.Id,
+		Email:       email,
+		Password:    password,
+		Token:       user.Token,
+		IsChirpyRed: user.IsChirpyRed,
+	}
 
-    err = db.writeDB(dbStructure)
-    if err != nil {
-        return User{}, err 
-    }
-    return updatedUser, nil  
-}
+	dbStructure.Users[id] = updatedUser
 
-func (db *DB) StoreRefreshToken(refreshToken RefreshToken, id int) (User, error) {
-    dbStructure, err := db.loadDB()
-    if err != nil {
-        return User{}, err
-    }
-
-    user, ok := dbStructure.Users[id]
-    if !ok {
-        return User{}, fmt.Errorf("user does not exist")
-    }
-
-    updatedUser := User{
-        Id: user.Id,
-        Email: user.Email,
-        Password: user.Password,
-        Token: user.Token,
-        RefreshToken: refreshToken,
-    }
-
-    dbStructure.Users[id] = updatedUser
-
-    err = db.writeDB(dbStructure)
-    if err != nil {
-        return User{}, err
-    }
-    return updatedUser, nil
+	err = db.writeDB(dbStructure)
+	if err != nil {
+		return User{}, err
+	}
+	return updatedUser, nil
 }
 
 func (db *DB) GetUserByEmail(email string) (User, error) {
@@ -106,12 +82,41 @@ func (db *DB) GetUserByEmail(email string) (User, error) {
 		return User{}, err
 	}
 
-    user, ok := searchUserByEmail(dbStructure, email)
-    if !ok {
-        return User{}, fmt.Errorf("user does not exist")
-    }
+	user, ok := searchUserByEmail(dbStructure, email)
+	if !ok {
+		return User{}, fmt.Errorf("user does not exist")
+	}
 
-    return user, nil
+	return user, nil
+}
+
+func (db *DB) UpgradeUser(userID int) error {
+	dbStructure, err := db.loadDB()
+	if err != nil {
+		return err
+	}
+
+	user, ok := dbStructure.Users[userID]
+	if !ok {
+		return fmt.Errorf("user does not exist")
+	}
+
+	updatedUser := User{
+		Id:          user.Id,
+		Email:       user.Email,
+		Password:    user.Password,
+		Token:       user.Email,
+		IsChirpyRed: true,
+	}
+
+	dbStructure.Users[userID] = updatedUser
+
+	err = db.writeDB(dbStructure)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func searchUserByEmail(dbStructure DBStructure, email string) (User, bool) {
@@ -122,4 +127,3 @@ func searchUserByEmail(dbStructure DBStructure, email string) (User, bool) {
 	}
 	return User{}, false
 }
-

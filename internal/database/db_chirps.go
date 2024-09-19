@@ -5,7 +5,7 @@ import (
 )
 
 // CreateChirp creates a new chirp and saves it to disk
-func (db *DB) CreateChirp(body string) (Chirp, error) {
+func (db *DB) CreateChirp(body string, userID int) (Chirp, error) {
 	dbStructure, err := db.loadDB()
 	if err != nil {
 		return Chirp{}, fmt.Errorf("unable to load db: %s", err)
@@ -16,6 +16,7 @@ func (db *DB) CreateChirp(body string) (Chirp, error) {
 	chirp := Chirp{
 		Id:   id,
 		Body: body,
+        AuthorID: userID,
 	}
 	dbStructure.Chirps[id] = chirp
 
@@ -54,4 +55,32 @@ func (db *DB) GetChirpByID(id int) (Chirp, error) {
     }
 
     return chirp, nil
+}
+
+func (db *DB) DeleteChirpByID(id int) (error) {
+    dbStructure, err := db.loadDB()
+    if err != nil {
+        return err
+    }
+
+    _, ok := dbStructure.Chirps[id]
+    if !ok {
+        return fmt.Errorf("unable to find chirp with provided id")
+    }
+
+    delete(dbStructure.Chirps, id)
+   
+    for key, val := range dbStructure.Chirps {
+        if key > id {
+            dbStructure.Chirps[key - 1] = val
+            delete(dbStructure.Chirps, key)
+        }
+    }
+
+    err = db.writeDB(dbStructure)
+    if err != nil {
+        return err
+    }
+
+    return nil
 }

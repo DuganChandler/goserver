@@ -11,24 +11,27 @@ type DB struct {
 }
 
 type Chirp struct {
-	Id   int    `json:"id"`
-	Body string `json:"body"`
+	Id       int    `json:"id"`
+	Body     string `json:"body"`
+	AuthorID int    `json:"author_id"`
 }
 
 type DBStructure struct {
-	Chirps map[int]Chirp `json:"chirps"`
-	Users  map[int]User  `json:"users"`
+	Chirps        map[int]Chirp           `json:"chirps"`
+	Users         map[int]User            `json:"users"`
+	RefreshTokens map[string]RefreshToken `json:"refresh_tokens"`
 }
 
 type RefreshToken struct {
-	Token    string        `json:"token"`
-	Duration time.Duration `json:"duration"`
+	UserID    int       `json:"user_id"`
+	Token     string    `json:"token"`
+	ExpiresAt time.Time `json:"expires_at"`
 }
 
 type User struct {
-	Id           int          `json:"id"`
-	Email        string       `json:"email"`
-	Password     string       `json:"password"`
-	Token        string       `json:"token"`
-	RefreshToken RefreshToken `json:"refresh_token"`
+	Id          int    `json:"id"`
+	Email       string `json:"email"`
+	Password    string `json:"password"`
+	Token       string `json:"token"`
+	IsChirpyRed bool   `json:"is_chirpy_red"`
 }

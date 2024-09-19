@@ -1,6 +1,8 @@
 package auth
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"net/http"
 	"strconv"
@@ -75,4 +77,29 @@ func GetBearerToken(headers http.Header) (string, error) {
 	}
 
 	return splitAuth[1], nil
+}
+
+func GetAPIKey(headers http.Header) (string, error) {
+	authHeader := headers.Get("Authorization")
+	if authHeader == "" {
+		return "", ErrNoAuthHeaderIncluded
+	}
+	splitAuth := strings.Split(authHeader, " ")
+	if len(splitAuth) < 2 || splitAuth[0] != "ApiKey" {
+		return "", errors.New("malformed authorization header")
+	}
+
+	return splitAuth[1], nil
+    
+}
+
+func CreateNewRefreshToken() (string, error) {
+	rToken := make([]byte, 32)
+	_, err := rand.Read(rToken)
+	if err != nil {
+		return "", err
+	}
+	rTokenEncoded := hex.EncodeToString(rToken)
+
+	return rTokenEncoded, nil
 }

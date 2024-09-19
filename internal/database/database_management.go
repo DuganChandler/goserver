@@ -22,17 +22,18 @@ func NewDB(path string) (*DB, error) {
 // ensure db exists
 func (db *DB) ensureDB() error {
 	_, err := os.ReadFile(db.path)
-    if errors.Is(err, os.ErrNotExist) {
-        db.createDB()
-    }
+	if errors.Is(err, os.ErrNotExist) {
+		db.createDB()
+	}
 
 	return err
 }
 
 func (db *DB) createDB() error {
 	dbStructure := DBStructure{
-		Chirps: map[int]Chirp{},
-        Users: map[int]User{},
+		Chirps:        map[int]Chirp{},
+		Users:         map[int]User{},
+		RefreshTokens: map[string]RefreshToken{},
 	}
 	return db.writeDB(dbStructure)
 }

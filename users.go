@@ -1,9 +1,8 @@
 package main
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -39,8 +38,9 @@ func (cfg *apiConfig) createUsersHandler(w http.ResponseWriter, req *http.Reques
 	}
 
 	responseWithJSON(w, http.StatusCreated, database.User{
-		Id:    user.Id,
-		Email: user.Email,
+		Id:          user.Id,
+		Email:       user.Email,
+		IsChirpyRed: user.IsChirpyRed,
 	})
 }
 
@@ -58,7 +58,7 @@ func (cfg *apiConfig) updateUsersLoginHandler(w http.ResponseWriter, req *http.R
 
 	subject, err := auth.VerifyJWT(tokenString, cfg.JWTSecret)
 	if err != nil {
-		respondWithError(w, http.StatusUnauthorized, "unable to turn id into int")
+		respondWithError(w, http.StatusUnauthorized, fmt.Sprintf("unable to verify jwt: %s", err))
 		return
 	}
 
@@ -89,9 +89,10 @@ func (cfg *apiConfig) updateUsersLoginHandler(w http.ResponseWriter, req *http.R
 	}
 
 	responseWithJSON(w, http.StatusOK, database.User{
-		Id:    user.Id,
-		Email: user.Email,
-		Token: user.Token,
+		Id:          user.Id,
+		Email:       user.Email,
+		Token:       user.Token,
+		IsChirpyRed: user.IsChirpyRed,
 	})
 }
 
@@ -99,6 +100,14 @@ func (cfg *apiConfig) loginUsersHadler(w http.ResponseWriter, req *http.Request)
 	type parameters struct {
 		Email    string `json:"email"`
 		Password string `json:"password"`
+	}
+
+	type response struct {
+		ID           int    `json:"id"`
+		Email        string `json:"email"`
+		Token        string `json:"token"`
+		RefreshToken string `json:"refresh_token"`
+		IsChirpyRed  bool   `json:"is_chirpy_red"`
 	}
 
 	decoder := json.NewDecoder(req.Body)
@@ -127,28 +136,23 @@ func (cfg *apiConfig) loginUsersHadler(w http.ResponseWriter, req *http.Request)
 		respondWithError(w, http.StatusUnauthorized, "unable to create jwt signature")
 	}
 
-	rToken := make([]byte, 32)
-	_, err = rand.Read(rToken)
+	refreshToken, err := auth.CreateNewRefreshToken()
 	if err != nil {
-		respondWithError(w, http.StatusUnauthorized, "unable to create refresh token")
-	}
-	rTokenEncoded := hex.EncodeToString(rToken)
-
-	refreshToken := database.RefreshToken{
-		Token:    rTokenEncoded,
-		Duration: time.Duration((24 * 60) * time.Hour),
+		respondWithError(w, http.StatusUnauthorized, "unable to create new refresh token")
 	}
 
-	_, err = cfg.DB.StoreRefreshToken(refreshToken, user.Id)
+	err = cfg.DB.StoreRefreshToken(refreshToken, user.Id)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "unable to store refresh token")
 		return
 	}
 
-	responseWithJSON(w, http.StatusOK, database.User{
-		Id:           user.Id,
+	responseWithJSON(w, http.StatusOK, response{
+		ID:           user.Id,
 		Email:        user.Email,
 		Token:        jwtToken,
-		RefreshToken: database.RefreshToken{Token: rTokenEncoded},
+		RefreshToken: refreshToken,
+        IsChirpyRed: user.IsChirpyRed,
 	})
 }
+
