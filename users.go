@@ -1,18 +1,17 @@
 package main
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
+	"github.com/DuganChandler/goserver/internal/auth"
 	"github.com/DuganChandler/goserver/internal/database"
-	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 )
-
-//NOTE: separate auth logic into dedicated internal/auth file. that would be like createJWT and such so there are not 1000000 fucking if err != nil
 
 func (cfg *apiConfig) createUsersHandler(w http.ResponseWriter, req *http.Request) {
 	type parameters struct {
@@ -28,13 +27,12 @@ func (cfg *apiConfig) createUsersHandler(w http.ResponseWriter, req *http.Reques
 		return
 	}
 
-	password, err := bcrypt.GenerateFromPassword([]byte(params.Password), 14)
+	hashedPassword, err := auth.HashPassword(params.Password)
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "unable to hash password")
-		return
+		respondWithError(w, http.StatusUnauthorized, err.Error())
 	}
 
-	user, err := cfg.DB.CreateUsers(params.Email, string(password))
+	user, err := cfg.DB.CreateUsers(params.Email, string(hashedPassword))
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "error creating user")
 		return
@@ -52,28 +50,13 @@ func (cfg *apiConfig) updateUsersLoginHandler(w http.ResponseWriter, req *http.R
 		Password string `json:"password"`
 	}
 
-	tokenString := strings.TrimPrefix(req.Header.Get("Authorization"), "Bearer ")
-
-	type customClaims struct {
-		jwt.RegisteredClaims
-	}
-
-	token, err := jwt.ParseWithClaims(tokenString, &customClaims{}, func(t *jwt.Token) (interface{}, error) {
-		return []byte(cfg.JWTSecret), nil
-	})
-
+	tokenString, err := auth.GetBearerToken(req.Header)
 	if err != nil {
-		respondWithError(w, http.StatusUnauthorized, err.Error())
+		respondWithError(w, http.StatusUnauthorized, "could not find JWT")
 		return
 	}
 
-	subject, err := token.Claims.GetSubject()
-	if err != nil {
-		respondWithError(w, http.StatusUnauthorized, "unable to get subect from token")
-		return
-	}
-
-	userID, err := strconv.Atoi(subject)
+	subject, err := auth.VerifyJWT(tokenString, cfg.JWTSecret)
 	if err != nil {
 		respondWithError(w, http.StatusUnauthorized, "unable to turn id into int")
 		return
@@ -93,7 +76,13 @@ func (cfg *apiConfig) updateUsersLoginHandler(w http.ResponseWriter, req *http.R
 		return
 	}
 
-	user, err := cfg.DB.UpdateUserLogin(params.Email, string(password), userID)
+	userIDInt, err := strconv.Atoi(subject)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "could not parse user ID")
+		return
+	}
+
+	user, err := cfg.DB.UpdateUserLogin(params.Email, string(password), userIDInt)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "unable to update user login info")
 		return
@@ -108,9 +97,8 @@ func (cfg *apiConfig) updateUsersLoginHandler(w http.ResponseWriter, req *http.R
 
 func (cfg *apiConfig) loginUsersHadler(w http.ResponseWriter, req *http.Request) {
 	type parameters struct {
-		Email            string `json:"email"`
-		Password         string `json:"password"`
-		ExpiresInSeconds int    `json:"expires_in_seconds"`
+		Email    string `json:"email"`
+		Password string `json:"password"`
 	}
 
 	decoder := json.NewDecoder(req.Body)
@@ -127,36 +115,40 @@ func (cfg *apiConfig) loginUsersHadler(w http.ResponseWriter, req *http.Request)
 		return
 	}
 
-	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(params.Password))
+	err = auth.CheckPasswordHash(params.Password, user.Password)
 	if err != nil {
 		respondWithError(w, http.StatusUnauthorized, "you are unauthorized")
 		return
 	}
 
-	expiration := time.Duration(0 * time.Second)
-	if params.ExpiresInSeconds == 0 || params.ExpiresInSeconds > 24 {
-		expiration = time.Duration(24 * time.Hour)
-	} else {
-		expiration = time.Duration(params.ExpiresInSeconds * int(time.Second))
-	}
-
-	claims := jwt.RegisteredClaims{
-		Issuer:    "chirpy",
-		IssuedAt:  jwt.NewNumericDate(time.Now().UTC()),
-		ExpiresAt: jwt.NewNumericDate(time.Now().Add(expiration).UTC()),
-		Subject:   strconv.Itoa(user.Id),
-	}
-
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-
-	signature, err := token.SignedString([]byte(cfg.JWTSecret))
+	duration := time.Duration(1 * time.Hour)
+	jwtToken, err := auth.MakeJWT(user.Id, cfg.JWTSecret, duration)
 	if err != nil {
 		respondWithError(w, http.StatusUnauthorized, "unable to create jwt signature")
 	}
 
+	rToken := make([]byte, 32)
+	_, err = rand.Read(rToken)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "unable to create refresh token")
+	}
+	rTokenEncoded := hex.EncodeToString(rToken)
+
+	refreshToken := database.RefreshToken{
+		Token:    rTokenEncoded,
+		Duration: time.Duration((24 * 60) * time.Hour),
+	}
+
+	_, err = cfg.DB.StoreRefreshToken(refreshToken, user.Id)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "unable to store refresh token")
+		return
+	}
+
 	responseWithJSON(w, http.StatusOK, database.User{
-		Id:    user.Id,
-		Email: user.Email,
-		Token: signature,
+		Id:           user.Id,
+		Email:        user.Email,
+		Token:        jwtToken,
+		RefreshToken: database.RefreshToken{Token: rTokenEncoded},
 	})
 }

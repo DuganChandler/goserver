@@ -72,6 +72,34 @@ func (db *DB) UpdateUserLogin(email, password string, id int) (User, error) {
     return updatedUser, nil  
 }
 
+func (db *DB) StoreRefreshToken(refreshToken RefreshToken, id int) (User, error) {
+    dbStructure, err := db.loadDB()
+    if err != nil {
+        return User{}, err
+    }
+
+    user, ok := dbStructure.Users[id]
+    if !ok {
+        return User{}, fmt.Errorf("user does not exist")
+    }
+
+    updatedUser := User{
+        Id: user.Id,
+        Email: user.Email,
+        Password: user.Password,
+        Token: user.Token,
+        RefreshToken: refreshToken,
+    }
+
+    dbStructure.Users[id] = updatedUser
+
+    err = db.writeDB(dbStructure)
+    if err != nil {
+        return User{}, err
+    }
+    return updatedUser, nil
+}
+
 func (db *DB) GetUserByEmail(email string) (User, error) {
 	dbStructure, err := db.loadDB()
 	if err != nil {
@@ -94,3 +122,4 @@ func searchUserByEmail(dbStructure DBStructure, email string) (User, bool) {
 	}
 	return User{}, false
 }
+
