@@ -14,9 +14,9 @@ func (db *DB) CreateChirp(body string, userID int) (Chirp, error) {
 	id := len(dbStructure.Chirps) + 1
 
 	chirp := Chirp{
-		Id:   id,
-		Body: body,
-        AuthorID: userID,
+		Id:       id,
+		Body:     body,
+		AuthorID: userID,
 	}
 	dbStructure.Chirps[id] = chirp
 
@@ -44,43 +44,63 @@ func (db *DB) GetChirps() ([]Chirp, error) {
 }
 
 func (db *DB) GetChirpByID(id int) (Chirp, error) {
-    dbStructure, err := db.loadDB()
-    if err != nil {
-        return Chirp{}, err
-    }
+	dbStructure, err := db.loadDB()
+	if err != nil {
+		return Chirp{}, err
+	}
 
-    chirp, ok := dbStructure.Chirps[id]
-    if !ok {
-        return Chirp{}, fmt.Errorf("No chirp matching the id: %d", id)
-    }
+	chirp, ok := dbStructure.Chirps[id]
+	if !ok {
+		return Chirp{}, fmt.Errorf("No chirp matching the id: %d", id)
+	}
 
-    return chirp, nil
+	return chirp, nil
 }
 
-func (db *DB) DeleteChirpByID(id int) (error) {
-    dbStructure, err := db.loadDB()
-    if err != nil {
-        return err
-    }
+func (db *DB) GetChirpsByAuthor(id int) ([]Chirp, error) {
+	dbStructure, err := db.loadDB()
+	if err != nil {
+		return []Chirp{}, err
+	}
 
-    _, ok := dbStructure.Chirps[id]
-    if !ok {
-        return fmt.Errorf("unable to find chirp with provided id")
-    }
+	chirps := make([]Chirp, 0)
+	for _, val := range dbStructure.Chirps {
+		if val.AuthorID == id {
+			chirps = append(chirps, val)
+		}
+	}
 
-    delete(dbStructure.Chirps, id)
-   
-    for key, val := range dbStructure.Chirps {
-        if key > id {
-            dbStructure.Chirps[key - 1] = val
-            delete(dbStructure.Chirps, key)
-        }
-    }
+	if len(chirps) == 0 {
+		return chirps, fmt.Errorf("no chirps matching that author_id")
+	}
 
-    err = db.writeDB(dbStructure)
-    if err != nil {
-        return err
-    }
+	return chirps, nil
+}
 
-    return nil
+func (db *DB) DeleteChirpByID(id int) error {
+	dbStructure, err := db.loadDB()
+	if err != nil {
+		return err
+	}
+
+	_, ok := dbStructure.Chirps[id]
+	if !ok {
+		return fmt.Errorf("unable to find chirp with provided id")
+	}
+
+	delete(dbStructure.Chirps, id)
+
+	for key, val := range dbStructure.Chirps {
+		if key > id {
+			dbStructure.Chirps[key-1] = val
+			delete(dbStructure.Chirps, key)
+		}
+	}
+
+	err = db.writeDB(dbStructure)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

@@ -64,9 +64,28 @@ func (cfg *apiConfig) createChirpsHandler(w http.ResponseWriter, req *http.Reque
 }
 
 func (cfg *apiConfig) getChirpsHandler(w http.ResponseWriter, req *http.Request) {
-	dbChirps, err := cfg.DB.GetChirps()
-	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, err.Error())
+	query := req.URL.Query().Get("author_id")
+
+    var dbChirps []database.Chirp
+    var err error
+	if query != "" {
+		authorID, err := strconv.Atoi(query)
+		if err != nil {
+			respondWithError(w, http.StatusInternalServerError, "unable to make author ID query into int")
+            return
+		}
+
+        dbChirps, err = cfg.DB.GetChirpsByAuthor(authorID)
+		if err != nil {
+			respondWithError(w, http.StatusInternalServerError, err.Error())
+            return
+		}
+	} else {
+        dbChirps, err = cfg.DB.GetChirps()
+		if err != nil {
+			respondWithError(w, http.StatusInternalServerError, err.Error())
+            return
+		}
 	}
 
 	chirps := []database.Chirp{}
@@ -78,9 +97,16 @@ func (cfg *apiConfig) getChirpsHandler(w http.ResponseWriter, req *http.Request)
 		})
 	}
 
-	sort.Slice(chirps, func(i, j int) bool {
-		return chirps[i].Id < chirps[j].Id
-	})
+    sortQuery := req.URL.Query().Get("sort")
+    if sortQuery == "asc" || sortQuery == "" {
+        sort.Slice(chirps, func(i, j int) bool {
+            return chirps[i].Id < chirps[j].Id
+        })
+    } else if sortQuery == "desc" {
+        sort.Slice(chirps, func(i, j int) bool {
+            return chirps[i].Id > chirps[j].Id
+        })
+    }
 
 	responseWithJSON(w, http.StatusOK, chirps)
 }
@@ -89,13 +115,13 @@ func (cfg *apiConfig) getChirpByIDHandler(w http.ResponseWriter, req *http.Reque
 	chirpID, err := strconv.Atoi(req.PathValue("chirpID"))
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, err.Error())
-        return
+		return
 	}
 
 	chirp, err := cfg.DB.GetChirpByID(chirpID)
 	if err != nil {
 		respondWithError(w, http.StatusNotFound, err.Error())
-        return
+		return
 	}
 
 	responseWithJSON(w, http.StatusOK, chirp)
@@ -123,23 +149,23 @@ func (cfg *apiConfig) deleteChirpByIDHandler(w http.ResponseWriter, req *http.Re
 	chirpID, err := strconv.Atoi(req.PathValue("chirpID"))
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, err.Error())
-        return
+		return
 	}
 
-    chirp, err := cfg.DB.GetChirpByID(chirpID)
-    if err != nil {
-        respondWithError(w, http.StatusInternalServerError, "unable to find chirp with desired id")
-        return
-    }
+	chirp, err := cfg.DB.GetChirpByID(chirpID)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "unable to find chirp with desired id")
+		return
+	}
 
-    if chirp.AuthorID != userID {
-        respondWithError(w, http.StatusForbidden, "you do not have authorization to delete provided chirp")
-        return
-    }
+	if chirp.AuthorID != userID {
+		respondWithError(w, http.StatusForbidden, "you do not have authorization to delete provided chirp")
+		return
+	}
 
-    err = cfg.DB.DeleteChirpByID(chirpID)
+	err = cfg.DB.DeleteChirpByID(chirpID)
 
-    w.WriteHeader(http.StatusNoContent)
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func checkBadWords(body string) string {
